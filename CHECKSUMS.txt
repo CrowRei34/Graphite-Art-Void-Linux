@@ -1,0 +1,33 @@
+Sumas de verificacion (SHA256)
+================================
+
+Distfiles (fuentes descargadas para el build)
+---------------------------------------------
+
+ee4b412fd2817c61423b5bbeed56f00e1c952d54c5c871419f7aa773a1bec189  95c1ab81f31f318a9e344d1d229feacff861ad39.tar.gz
+   Fuente de Graphite (commit 95c1ab8, rama latest-stable)
+
+38f18c0499afbcb88b7410e7881430c7b2e64c6188e7d01c7ac25d20b49ea9cb  cef_binary_149.0.5+g6770623+chromium-149.0.7827.197_linux64_minimal.tar.bz2
+   Chromium Embedded Framework 149 (linux64 minimal)
+
+0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc  binaryen-version_130-x86_64-linux.tar.gz
+   Binaryen 130 (wasm-opt precompilado para x86_64)
+
+772d64518be43c99977ba56f69e574531c56e83d2df2f42ab066f77f74b0dd1f  0d004aa61e6b48d316e8e5db6d59ccc4788f192d.tar.gz
+   Branding assets (iconos + assets del frontend)
+
+Estas sumas coinciden con el campo `checksum` de la template.
+
+
+Paquete compilado
+------------------
+
+cb2963c669976230ceb9a8a22f54fc8512da50739047b95e06f351e71daa011f  graphite-0.0.0rc6_1.x86_64.xbps
+   Paquete XBPS binario (135 MB)
+
+
+Verificar
+---------
+
+    sha256sum graphite-0.0.0rc6_1.x86_64.xbps
+    # debe imprimir: cb2963c6...daa011f

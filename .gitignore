@@ -1,0 +1,10 @@
+# Paquete binario .xbps (se genera con install.sh --build o xbps-src)
+*.xbps
+
+# Directorios de build de xbps-src
+hostdir/
+masterdir*/
+builddir/
+
+# Caches
+*.lock

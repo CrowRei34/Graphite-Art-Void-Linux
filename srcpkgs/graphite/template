@@ -1,0 +1,209 @@
+# Template file for 'graphite'
+#
+# Graphite is a node-based procedural 2D vector & raster graphics editor.
+# This builds the native desktop application from the moving "latest-stable"
+# release (pinned to commit 95c1ab8, "Prep for the RC6 release of the desktop
+# app") and bundles the Chromium Embedded Framework (CEF) 149 runtime.
+#
+# Notable trade-offs (documented because they differ from a full upstream build):
+#  * x86_64 only — the CEF and binaryen tarballs used here are linux64/x86_64
+#    prebuilt binaries.
+#  * A rustup-managed stable toolchain is installed during the build because
+#    Void's "rust" package does not ship the wasm32-unknown-unknown target
+#    that the web frontend requires.
+#  * The desktop "gpu" feature (GPU-accelerated raster shader nodes, which
+#    needs the rust-gpu/SPIR-V nightly toolchain not packaged in Void) is
+#    disabled in post_patch(); raster nodes fall back to CPU execution.
+#  * Release LTO and debuginfo are disabled (CARGO_PROFILE_RELEASE_*) to keep
+#    the build within reasonable disk/time limits.
+#
+# Build it with:  ./xbps-src pkg graphite
+# Install with:   xbps-install -R hostdir/binpkgs graphite
+
+pkgname=graphite
+version=0.0.0rc6
+revision=1
+archs="x86_64*"
+
+_github_commit=95c1ab81f31f318a9e344d1d229feacff861ad39
+_cef_version="149.0.5+g6770623+chromium-149.0.7827.197"
+_binaryen_version=130
+_rust_version=1.96.0
+_wasm_bindgen_version=0.2.121
+
+hostmakedepends="rustup nodejs cmake ninja lld patchelf
+ cargo-about pkg-config curl git python3"
+makedepends="MesaLib-devel libgbm-devel vulkan-loader-devel wayland-devel
+ openssl-devel libraw-devel libxkbcommon-devel libXcursor-devel libxcb-devel
+ libX11-devel fontconfig-devel freetype-devel"
+
+depends="mesa mesa-dri libglvnd libgbm vulkan-loader wayland openssl libraw
+ libxkbcommon libXcursor libxcb libX11 libXcomposite libXdamage libXext
+ libXfixes libXrandr nss nspr libcups alsa-lib dbus-libs glib cairo pango atk
+ at-spi2-core expat eudev-libudev fontconfig freetype hicolor-icon-theme
+ desktop-file-utils"
+
+short_desc="Node-based procedural 2D vector & raster graphics editor (desktop, alpha)"
+maintainer="user <user@localhost>"
+license="Apache-2.0"
+homepage="https://graphite.art"
+changelog="https://github.com/GraphiteEditor/Graphite/releases"
+
+distfiles="
+ https://github.com/GraphiteEditor/Graphite/archive/${_github_commit}.tar.gz
+ https://cef-builds.spotifycdn.com/cef_binary_${_cef_version}_linux64_minimal.tar.bz2
+ https://github.com/WebAssembly/binaryen/releases/download/version_${_binaryen_version}/binaryen-version_${_binaryen_version}-x86_64-linux.tar.gz
+ https://github.com/Keavon/graphite-branded-assets/archive/0d004aa61e6b48d316e8e5db6d59ccc4788f192d.tar.gz
+"
+checksum="
+ ee4b412fd2817c61423b5bbeed56f00e1c952d54c5c871419f7aa773a1bec189
+ 38f18c0499afbcb88b7410e7881430c7b2e64c6188e7d01c7ac25d20b49ea9cb
+ 0a18362361ad05465118cd8eeb72edaeec89de6894bc283576ef4e07aa3babcc
+ 772d64518be43c99977ba56f69e574531c56e83d2df2f42ab066f77f74b0dd1f
+"
+
+nodebug=yes
+lib32disabled=yes
+
+# Only extract the source tarball into wrksrc; the CEF, binaryen and branding
+# tarballs are extracted manually in do_build so their contents land in
+# predictable locations (and to avoid the '+' in the CEF directory name).
+do_extract() {
+	mkdir -p "${wrksrc}"
+	bsdtar -xf "${XBPS_SRCDISTDIR}/${_github_commit}.tar.gz" -C "${wrksrc}" --strip-components=1
+}
+
+# Drop the "gpu" feature from the desktop default feature set. The gpu feature
+# pulls in raster-nodes-shaders, which is compiled with the rust-gpu SPIR-V
+# codegen backend (a nightly-only toolchain not available in Void). Without it
+# the editor still works, executing raster nodes on the CPU.
+post_patch() {
+	sed -i 's/recommended = \["gpu", "accelerated_paint"\]/recommended = ["accelerated_paint"]/' \
+		"${wrksrc}/desktop/Cargo.toml"
+}
+
+do_build() {
+	# --- Rust toolchain with the wasm32 target (Void's rust lacks it) ---
+	# Keep the toolchain, installed cargo bins (wasm-bindgen) and the crate
+	# registry in a persistent location under the masterdir so retries don't
+	# re-download/rebuild them every time.
+	export RUSTUP_HOME="/var/cache/graphite-rustup"
+	export CARGO_HOME="/var/cache/graphite-cargo"
+	mkdir -p "${CARGO_HOME}/bin" "${RUSTUP_HOME}"
+	export PATH="${CARGO_HOME}/bin:${PATH}"
+	rustup-init -y --profile minimal --default-toolchain "${_rust_version}" \
+		--no-modify-path
+	# Add the wasm32 target (rustup-init's -c treats it as a component and skips it,
+	# so add it explicitly as a target instead).
+	rustup target add wasm32-unknown-unknown
+
+	# wasm-bindgen-cli version must match the wasm-bindgen pinned in Cargo.lock
+	cargo install --jobs 2 "wasm-bindgen-cli@${_wasm_bindgen_version}"
+
+	# --- Prebuilt binaryen provides wasm-opt (used to optimize the wasm) ---
+	mkdir -p "${wrksrc}/.binaryen"
+	bsdtar -xf "${XBPS_SRCDISTDIR}/binaryen-version_${_binaryen_version}-x86_64-linux.tar.gz" \
+		-C "${wrksrc}/.binaryen" --strip-components=1
+	export PATH="${wrksrc}/.binaryen/bin:${PATH}"
+
+	# --- CEF 149 (built against via the cef / cef-dll-sys crates) ---
+	mkdir -p "${wrksrc}/cef"
+	bsdtar -xf "${XBPS_SRCDISTDIR}/cef_binary_${_cef_version}_linux64_minimal.tar.bz2" \
+		-C "${wrksrc}/cef" --strip-components=1
+	export CEF_PATH="${wrksrc}/cef"
+
+	# --- Branding assets (icons + frontend svg/png assets) ---
+	mkdir -p "${wrksrc}/branding"
+	bsdtar -xf "${XBPS_SRCDISTDIR}/0d004aa61e6b48d316e8e5db6d59ccc4788f192d.tar.gz" \
+		-C "${wrksrc}/branding" --strip-components=1
+
+	# Source is a tarball (no .git), so feed the commit metadata explicitly.
+	export GRAPHITE_GIT_COMMIT_HASH="${_github_commit}"
+	export GRAPHITE_GIT_COMMIT_BRANCH="latest-stable"
+	export GRAPHITE_GIT_COMMIT_DATE="2026-02-04T00:00:00Z"
+
+	# Shrink release artifacts: the project defaults to lto="thin" + debug=true
+	# which is very large. Disable both for packaging.
+	export CARGO_PROFILE_RELEASE_LTO=off
+	export CARGO_PROFILE_RELEASE_DEBUG=0
+	export CARGO_INCREMENTAL=0
+	export CARGO_BUILD_JOBS=2
+	export CMAKE_BUILD_PARALLEL_LEVEL=2
+	# Use lld only for the native (x86_64) target. Passing -fuse-ld=lld to the
+	# wasm linker (rust-lld -flavor wasm) fails with "unknown argument".
+	export CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS="-C link-arg=-fuse-ld=lld"
+	export CC=cc CXX=c++
+
+	# 1. Frontend npm dependencies
+	cd "${wrksrc}/frontend"
+	npm ci --include=dev --prefer-offline --no-audit --no-fund
+	cd "${wrksrc}"
+
+	# 2. Build the editor wasm wrapper (native feature, release)
+	cargo build --lib --package graphite-wasm-wrapper \
+		--target wasm32-unknown-unknown --release \
+		--no-default-features --features native
+
+	# 3. Generate JS/wasm glue, then optimize the wasm for size
+	wasm-bindgen --target web --out-name graphite_wasm_wrapper \
+		--out-dir frontend/wrapper/pkg --no-demangle \
+		target/wasm32-unknown-unknown/release/graphite_wasm_wrapper.wasm
+	wasm-opt -Oz -g \
+		frontend/wrapper/pkg/graphite_wasm_wrapper_bg.wasm \
+		-o frontend/wrapper/pkg/graphite_wasm_wrapper_bg.wasm
+
+	# 4. Bundle the frontend with Vite (native mode -> frontend/dist)
+	cd frontend
+	node_modules/vite/bin/vite.js build --mode native
+	cd "${wrksrc}"
+
+	# Free the ~1 GB wasm build tree: the native desktop build doesn't use it,
+	# and removing it frees much-needed disk for the large release build.
+	rm -rf "${wrksrc}/target/wasm32-unknown-unknown"
+
+	# graphite-desktop embeds desktop/third-party-licenses.txt.xz at compile
+	# time (include_bytes! in desktop/src/app.rs). Upstream generates it with
+	# `cargo run -p third-party-licenses --features desktop`, but that tool links
+	# CEF and needs CEF runtime libs present to run. Generate a placeholder
+	# .xz with python3 (no xz binary in the chroot) using an absolute path.
+	python3 -c 'import lzma,pathlib; p=pathlib.Path("'"${wrksrc}"'"/desktop/third-party-licenses.txt.xz"); p.write_bytes(lzma.compress(b"Graphite - Third-party Licenses (placeholder)\n\nGraphite is licensed under the Apache License, Version 2.0.\nSee /usr/share/licenses/graphite/LICENSE.txt.\n\nThis package bundles the Chromium Embedded Framework (CEF) 149, licensed\nunder the BSD-3-Clause License, plus Chromium components under their\nrespective licenses. Full CEF/Chromium credits:\nhttps://cef-builds.spotifycdn.com/\n", preset=9))'
+
+	# 5. Build the desktop binary (release; gpu disabled in post_patch).
+	# frontend/dist must exist before this so embedded resources are bundled.
+	cargo build --release --package graphite-desktop-platform-linux
+}
+
+do_install() {
+	# Application binary + bundled CEF runtime (libcef.so + resources together
+	# so CEF resolves resources relative to libcef.so).
+	vmkdir usr/lib/graphite
+	vmkdir usr/lib/graphite/cef
+	install -Dm755 "${wrksrc}/target/release/graphite" \
+		"${DESTDIR}/usr/lib/graphite/graphite"
+	cp -a "${wrksrc}/cef/Release/." "${DESTDIR}/usr/lib/graphite/cef/"
+	cp -a "${wrksrc}/cef/Resources/." "${DESTDIR}/usr/lib/graphite/cef/"
+	# CEF runs with no_sandbox enabled, so the setuid chrome-sandbox isn't needed.
+	rm -f "${DESTDIR}/usr/lib/graphite/cef/chrome-sandbox"
+
+	# Point the binary at the bundled CEF libraries ($ORIGIN/cef).
+	patchelf --set-rpath '$ORIGIN/cef' "${DESTDIR}/usr/lib/graphite/graphite"
+
+	# Wrapper so the app is launchable as `graphite` and matches the .desktop Exec.
+	vinstall "${FILESDIR}/graphite" 755 usr/bin graphite
+
+	# Desktop entry (shipped in the source tree)
+	vinstall "${wrksrc}/desktop/assets/art.graphite.Graphite.desktop" \
+		644 usr/share/applications
+
+	# Icons from the branding assets
+	vmkdir usr/share/icons/hicolor/scalable/apps
+	vinstall "${wrksrc}/branding/app-icons/graphite.svg" \
+		644 usr/share/icons/hicolor/scalable/apps art.graphite.Graphite.svg
+	for s in 128 256 512; do
+		vmkdir "usr/share/icons/hicolor/${s}x${s}/apps"
+		vinstall "${wrksrc}/branding/app-icons/graphite-${s}.png" \
+			644 "usr/share/icons/hicolor/${s}x${s}/apps" art.graphite.Graphite.png
+	done
+
+	vlicense "${wrksrc}/LICENSE.txt"
+}

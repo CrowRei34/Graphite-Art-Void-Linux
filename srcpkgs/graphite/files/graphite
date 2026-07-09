@@ -1,0 +1,4 @@
+#!/bin/sh
+# Wrapper that launches the bundled Graphite desktop binary.
+# The CEF runtime libraries live next to the binary in /usr/lib/graphite/cef.
+exec /usr/lib/graphite/graphite "$@"
