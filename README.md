@@ -7,12 +7,16 @@ procedurales basado en nodos, construido y empaquetado para Void Linux.
 
 ```
 graphite-void-export/
-├── install.sh                              Script de instalacion automatica
-├── README.md                               Este archivo
+├── README.md                              Este archivo
 ├── BUILD-NOTES.md                          Notas técnicas del build y caveats
 ├── CHECKSUMS.txt                           Sumas de verificacion de distfiles
 ├── INSTALL.md                              Instrucciones de instalacion
-├── graphite-0.0.0rc6_1.x86_64.xbps        Paquete binario compilado
+├── CI.md                                   Documentacion de la compilacion automatizada
+├── install.sh                              Script de instalacion automatica
+├── .github/workflows/
+│   └── build.yml                           Workflow de GitHub Actions (build + release)
+├── ci/
+│   └── build.sh                            Script de build reutilizable (sin xbps-src)
 └── srcpkgs/
     └── graphite/
         ├── template                        Receta xbps-src
