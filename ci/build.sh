@@ -91,13 +91,18 @@ download "https://github.com/Keavon/graphite-branded-assets/archive/${BRANDING_C
 	"$WORKDIR/distfiles/branding.tar.gz" "$BRANDING_SHA256"
 
 # --- Extract ------------------------------------------------------------
+# Prefer bsdtar (libarchive, guaranteed installed via INSTALL_DEPS); fall back
+# to GNU tar. Both support -xf/-xzf/-xjf/-C/--strip-components.
+TAR=$(command -v bsdtar || command -v tar)
+[ -n "$TAR" ] || { log "no tar/bsdtar found"; exit 1; }
+log "Using: $TAR"
 log "Extracting distfiles..."
 rm -rf src cef .binaryen branding
 mkdir -p src cef .binaryen branding
-tar -xzf "$WORKDIR/distfiles/graphite-src.tar.gz" -C src --strip-components=1
-tar -xjf "$WORKDIR/distfiles/cef.tar.bz2" -C cef --strip-components=1
-tar -xzf "$WORKDIR/distfiles/binaryen.tar.gz" -C .binaryen --strip-components=1
-tar -xzf "$WORKDIR/distfiles/branding.tar.gz" -C branding --strip-components=1
+"$TAR" -xzf "$WORKDIR/distfiles/graphite-src.tar.gz" -C src --strip-components=1
+"$TAR" -xjf "$WORKDIR/distfiles/cef.tar.bz2" -C cef --strip-components=1
+"$TAR" -xzf "$WORKDIR/distfiles/binaryen.tar.gz" -C .binaryen --strip-components=1
+"$TAR" -xzf "$WORKDIR/distfiles/branding.tar.gz" -C branding --strip-components=1
 
 # --- Disable the "gpu" feature ------------------------------------------
 # Needs the rust-gpu SPIR-V nightly toolchain (not packaged in Void).

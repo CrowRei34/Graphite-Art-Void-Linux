@@ -94,7 +94,7 @@ jobs:
             -e CEF_VERSION -e BINARYEN_VERSION -e RUST_VERSION \
             -e WASM_BINDGEN_VERSION -e BRANDING_COMMIT \
             -e ARTIFACTS=/work/artifacts \
-            -e CARGO_BUILD_JOBS=3 \
+            -e CARGO_BUILD_JOBS=2 \
             --workdir /work \
             ghcr.io/void-linux/void-glibc-full:latest \
             sh ci/build.sh
