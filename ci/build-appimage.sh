@@ -104,6 +104,18 @@ fi
 cargo-about --version 2>/dev/null | grep -q "cargo-about ${CARGO_ABOUT_VERSION}" \
 	|| { log "cargo-about ${CARGO_ABOUT_VERSION} not on PATH after install"; exit 1; }
 
+# patchelf 0.18: Ubuntu 22.04 ships 0.14.x, which aborts with an internal
+# assertion (patchelf.cc:1231) when rewriting this binary's rpath. Use the
+# upstream static build instead — the same major version the Void package used.
+PATCHELF="$(command -v patchelf || true)"
+if ! "$PATCHELF" --version 2>/dev/null | grep -qE '0\.1[89]|0\.[2-9][0-9]'; then
+	curl -fL --retry 3 -o distfiles/patchelf.tar.gz \
+		"https://github.com/NixOS/patchelf/releases/download/0.18.0/patchelf-0.18.0-x86_64.tar.gz"
+	mkdir -p patchelf && tar -xzf distfiles/patchelf.tar.gz -C patchelf
+	PATCHELF="$WORKDIR/patchelf/bin/patchelf"
+fi
+log "Using patchelf: $("$PATCHELF" --version)"
+
 # --- CEF (linked against at build time, bundled at package time) ---------
 log "Fetching CEF ${CEF_VERSION}..."
 curl -fL --retry 3 -o distfiles/cef.tar.bz2 \
@@ -170,10 +182,11 @@ ldd "$APPDIR/usr/lib/graphite/cef/libcef.so" "$BIN" 2>/dev/null \
 	done
 
 # Point the binary at the bundled CEF, and pull in the GL libs CEF dlopen's,
-# mirroring upstream's Nix rpath handling.
-patchelf --set-rpath '$ORIGIN/cef' \
-	--add-needed libGL.so --add-needed libEGL.so \
-	"$APPDIR/usr/lib/graphite/graphite"
+# mirroring upstream's Nix rpath handling. Separate invocations: combining
+# --set-rpath with --add-needed in one call can trip patchelf's string rewrite.
+"$PATCHELF" --force-rpath --set-rpath '$ORIGIN/cef' "$APPDIR/usr/lib/graphite/graphite"
+"$PATCHELF" --add-needed libGL.so  "$APPDIR/usr/lib/graphite/graphite"
+"$PATCHELF" --add-needed libEGL.so "$APPDIR/usr/lib/graphite/graphite"
 
 # AppRun: launch the bundled binary; LD_LIBRARY_PATH is a safety net over rpath.
 cat > "$APPDIR/AppRun" <<'APPRUN'
