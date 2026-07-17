@@ -1,7 +1,12 @@
-# Graphite para Void Linux
+# Graphite para Linux
 
-Paquete XBPS de Graphite, el editor de gráficos vectoriales y raster
-procedurales basado en nodos, construido y empaquetado para Void Linux.
+Empaquetado de Graphite —el editor de gráficos vectoriales y raster
+procedurales basado en nodos— para Linux.
+
+El formato principal es un **AppImage portable** (x86_64) que corre en
+cualquier distribución sin instalación ni root, generado automáticamente por
+GitHub Actions (ver `CI.md`). El directorio `srcpkgs/` conserva además la
+receta XBPS para Void Linux como empaquetado nativo alternativo.
 
 ## Contenido de este directorio
 

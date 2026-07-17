@@ -1,6 +1,18 @@
 # Instalacion
 
-## Opcion 1: Instalar el binario precompilado
+## Opcion 0: AppImage portable (cualquier distro)
+
+Descarga el `.AppImage` desde la pagina de releases, dale permisos de
+ejecucion y lanzalo. No requiere instalacion ni root, y funciona en cualquier
+distribucion Linux x86_64 (no solo Void):
+
+    chmod +x Graphite-*-x86_64.AppImage
+    ./Graphite-*-x86_64.AppImage
+
+El AppImage trae empaquetado el runtime de CEF, asi que no depende de los
+paquetes del sistema listados mas abajo.
+
+## Opcion 1: Instalar el binario precompilado (Void Linux)
 
     xbps-install -R /ruta/a/graphite-void-export graphite
 

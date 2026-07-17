@@ -1,7 +1,7 @@
-name: Build Graphite XBPS
+name: Build Graphite AppImage
 
-# Compila automáticamente la versión más reciente de Graphite (rama
-# latest-stable) y la empaqueta como .xbps para Void Linux x86_64.
+# Compila la versión más reciente de Graphite (rama latest-stable) en Ubuntu y
+# la empaqueta como un AppImage portable x86_64. Sin xbps, sin Void Linux.
 #
 # Disparadores:
 #   - workflow_dispatch : ejecución manual (opcionalmente con un commit)
@@ -21,35 +21,29 @@ on:
   push:
     branches: [main]
     paths:
-      - 'ci/build.sh'
+      - 'ci/build-appimage.sh'
       - '.github/workflows/build.yml'
 
 permissions:
   contents: write   # necesario para crear releases (softprops/action-gh-release)
 
-# Versiones de los componentes prebuilt (CEF, binaryen, toolchain, etc.).
-# Sólo el commit de Graphite cambia entre builds; el resto queda pinned.
 env:
   CEF_VERSION: '149.0.5+g6770623+chromium-149.0.7827.197'
   BINARYEN_VERSION: '130'
   RUST_VERSION: '1.96.0'
   WASM_BINDGEN_VERSION: '0.2.121'
-  BRANDING_COMMIT: '0d004aa61e6b48d316e8e5db6d59ccc4788f192d'
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    # 22.04 da un glibc más viejo (2.35) → el AppImage corre en más distros.
+    runs-on: ubuntu-22.04
     timeout-minutes: 90
     outputs:
-      version:  ${{ steps.meta.outputs.version }}
-      filename: ${{ steps.meta.outputs.filename }}
-      commit:   ${{ steps.meta.outputs.commit }}
+      version: ${{ steps.meta.outputs.version }}
+      commit:  ${{ steps.meta.outputs.commit }}
     steps:
       - uses: actions/checkout@v4
 
-      # Resuelve qué commit de Graphite compilar.
-      # Se hace en el host (ubuntu) porque ahí actions/checkout ya está y git
-      # está disponible; luego el commit se pasa al contenedor Void.
       - name: Resolve Graphite commit
         id: meta
         run: |
@@ -58,46 +52,28 @@ jobs:
             COMMIT=$(git ls-remote https://github.com/GraphiteEditor/Graphite.git latest-stable | awk '{print $1}')
           fi
           SHORT=$(printf '%s' "$COMMIT" | cut -c1-7)
-          VERSION="0.0.0git${SHORT}"
-          echo "commit=$COMMIT"    >> "$GITHUB_OUTPUT"
-          echo "version=$VERSION"  >> "$GITHUB_OUTPUT"
-          echo "filename=graphite-${VERSION}_1.x86_64.xbps" >> "$GITHUB_OUTPUT"
-          echo "Resolved commit: $COMMIT (version $VERSION)"
+          echo "commit=$COMMIT"           >> "$GITHUB_OUTPUT"
+          echo "version=0.0.0git${SHORT}"  >> "$GITHUB_OUTPUT"
+          echo "Resolved commit: $COMMIT"
 
-      # Caché del toolchain de Rust y del registry de cargo. Persiste entre
-      # runs para no re-descargar/recompilar rustup + wasm-bindgen-cli.
-      - name: Cache Rust toolchain & cargo
+      # Cachea el toolchain de Rust y el registry/target de cargo entre runs.
+      - name: Cache Rust & cargo
         uses: actions/cache@v4
         with:
           path: |
-            /tmp/rustup-cache
-            /tmp/cargo-cache
-          key: rust-${{ env.RUST_VERSION }}-wb-${{ env.WASM_BINDGEN_VERSION }}-${{ hashFiles('ci/build.sh') }}
+            /tmp/graphite-build/rustup
+            /tmp/graphite-build/cargo
+            /tmp/graphite-build/src/target
+          key: appimage-rust-${{ env.RUST_VERSION }}-${{ hashFiles('ci/build-appimage.sh') }}
           restore-keys: |
-            rust-${{ env.RUST_VERSION }}-wb-${{ env.WASM_BINDGEN_VERSION }}-
+            appimage-rust-${{ env.RUST_VERSION }}-
 
-      # El build corre dentro de un contenedor Void Linux (glibc full).
-      # Se monta el checkout en /work y las cachés de Rust en /var/cache.
-      # Así las JS-actions (checkout/cache/upload) corren en el host ubuntu
-      # sin problemas de compatibilidad dentro del contenedor.
-      - name: Build in Void Linux container
+      - name: Build AppImage
         env:
           GRAPHITE_COMMIT: ${{ steps.meta.outputs.commit }}
           VERSION:         ${{ steps.meta.outputs.version }}
-        run: |
-          mkdir -p /tmp/rustup-cache /tmp/cargo-cache artifacts
-          docker run --rm \
-            -v "$PWD:/work" \
-            -v "/tmp/rustup-cache:/var/cache/graphite-rustup" \
-            -v "/tmp/cargo-cache:/var/cache/graphite-cargo" \
-            -e GRAPHITE_COMMIT -e VERSION \
-            -e CEF_VERSION -e BINARYEN_VERSION -e RUST_VERSION \
-            -e WASM_BINDGEN_VERSION -e BRANDING_COMMIT \
-            -e ARTIFACTS=/work/artifacts \
-            -e CARGO_BUILD_JOBS=2 \
-            --workdir /work \
-            ghcr.io/void-linux/void-glibc-full:latest \
-            sh ci/build.sh
+          ARTIFACTS:       ${{ github.workspace }}/artifacts
+        run: sh ci/build-appimage.sh
 
       - name: Show artifact
         run: |
@@ -106,7 +82,7 @@ jobs:
 
       - uses: actions/upload-artifact@v4
         with:
-          name: graphite-xbps
+          name: graphite-appimage
           path: artifacts/
           if-no-files-found: error
 
@@ -118,27 +94,28 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: graphite-xbps
+          name: graphite-appimage
           path: artifacts
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ needs.build.outputs.version }}
-          name: Graphite ${{ needs.build.outputs.version }} (Void Linux x86_64)
+          name: Graphite ${{ needs.build.outputs.version }} (AppImage x86_64)
           body: |
             Build automático de Graphite `latest-stable`
             (commit `${{ needs.build.outputs.commit }}`).
 
-            Empaquetado para Void Linux x86_64 con Chromium Embedded Framework (CEF) 149.
+            AppImage portable con Chromium Embedded Framework (CEF) 149.
+            Corre en cualquier distribución Linux x86_64 — sin instalación ni root.
 
-            **Instalación**
+            **Ejecución**
             ```
-            xbps-install -R <directorio-con-el-.xbps> graphite
+            chmod +x Graphite-*-x86_64.AppImage
+            ./Graphite-*-x86_64.AppImage
             ```
-            Consulta INSTALL.md en el repositorio para más detalles.
           files: |
-            artifacts/*.xbps
+            artifacts/*.AppImage
             artifacts/*.sha256
           prerelease: true
           make_latest: false
