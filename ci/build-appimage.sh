@@ -169,17 +169,14 @@ rm -f "$APPDIR/usr/lib/graphite/cef/chrome-sandbox"
 find "$APPDIR/usr/lib/graphite/cef/locales" -name '*.pak' \
 	! -name 'en-US*' ! -name 'es*' -delete 2>/dev/null || true
 
-# Bundle the Chromium system libraries next to libcef.so so the AppImage runs
-# on distros that don't ship them. Skip the truly-system libs (glibc, the GL
-# driver, core X) which must come from the host to match its kernel/drivers.
-log "Bundling CEF's system libraries..."
-EXCLUDE='libc\.so|libc-|libstdc++|libgcc_s|libm\.so|libdl\.so|libpthread|librt\.so|ld-linux|libGL\.so|libGLX|libEGL\.so|libGLdispatch|libdrm|libX11\.so|libxcb\.so|libXext|libwayland'
-ldd "$APPDIR/usr/lib/graphite/cef/libcef.so" "$BIN" 2>/dev/null \
-	| awk '/=> \// {print $3}' | sort -u \
-	| grep -vE "$EXCLUDE" \
-	| while read -r lib; do
-		[ -f "$lib" ] && cp -Ln "$lib" "$APPDIR/usr/lib/graphite/cef/" 2>/dev/null || true
-	done
+# Deliberately NOT bundling the base system libraries. NSS and Mesa can't be
+# bundled piecemeal: NSS's libnss3 dlopen's libsoftokn3/libfreebl3/libnssckbi
+# at runtime (ldd doesn't see them, so a partial copy aborts with
+# nss_error=-5925), and a bundled libgbm/Mesa can't load the host's
+# version-specific DRI driver ("did not find extension DRI_Mesa"). The Void
+# package proves the app runs against the host's libraries, so — exactly like
+# that package's `depends` — nss, mesa, gtk, cups, etc. come from the system.
+# The AppImage bundles only what isn't a system package: CEF (above).
 
 # Point the binary at the bundled CEF, and pull in the GL libs CEF dlopen's,
 # mirroring upstream's Nix rpath handling. Separate invocations: combining
