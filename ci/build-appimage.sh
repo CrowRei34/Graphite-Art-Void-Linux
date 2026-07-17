@@ -89,7 +89,12 @@ if ! command -v wasm-opt >/dev/null 2>&1; then
 	export PATH="$WORKDIR/binaryen/bin:$PATH"
 fi
 command -v wasm-bindgen >/dev/null 2>&1 || cargo install -f "wasm-bindgen-cli@${WASM_BINDGEN_VERSION}"
-command -v cargo-about  >/dev/null 2>&1 || cargo install cargo-about
+# cargo-about's binary lives behind the non-default `cli` feature; a plain
+# `cargo install cargo-about` compiles but installs no binary (and still exits
+# 0), so request the feature explicitly and then verify the tool is really on
+# PATH — cargo run build desktop shells out to `cargo about` for the licenses.
+command -v cargo-about  >/dev/null 2>&1 || cargo install cargo-about --locked --features cli
+command -v cargo-about  >/dev/null 2>&1 || { log "cargo-about not on PATH after install"; exit 1; }
 
 # --- CEF (linked against at build time, bundled at package time) ---------
 log "Fetching CEF ${CEF_VERSION}..."
