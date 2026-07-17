@@ -24,6 +24,9 @@ CEF_VERSION="${CEF_VERSION:-149.0.5+g6770623+chromium-149.0.7827.197}"
 BINARYEN_VERSION="${BINARYEN_VERSION:-130}"
 RUST_VERSION="${RUST_VERSION:-1.96.0}"
 WASM_BINDGEN_VERSION="${WASM_BINDGEN_VERSION:-0.2.121}"
+# Must match upstream: Graphite's about.toml uses the 0.9.0 config schema, and
+# newer cargo-about rejects it ("expected a table, found boolean").
+CARGO_ABOUT_VERSION="${CARGO_ABOUT_VERSION:-0.9.0}"
 VERSION="${VERSION:-}"
 WORKDIR="${WORKDIR:-/tmp/graphite-build}"
 ARTIFACTS="${ARTIFACTS:-$PWD/artifacts}"
@@ -93,8 +96,13 @@ command -v wasm-bindgen >/dev/null 2>&1 || cargo install -f "wasm-bindgen-cli@${
 # `cargo install cargo-about` compiles but installs no binary (and still exits
 # 0), so request the feature explicitly and then verify the tool is really on
 # PATH — cargo run build desktop shells out to `cargo about` for the licenses.
-command -v cargo-about  >/dev/null 2>&1 || cargo install cargo-about --locked --features cli
-command -v cargo-about  >/dev/null 2>&1 || { log "cargo-about not on PATH after install"; exit 1; }
+# Check the exact version, not just presence: a cached cargo-about of a
+# different version would otherwise satisfy `command -v` and keep the wrong one.
+if ! cargo-about --version 2>/dev/null | grep -q "cargo-about ${CARGO_ABOUT_VERSION}"; then
+	cargo install -f "cargo-about@${CARGO_ABOUT_VERSION}" --locked --features cli
+fi
+cargo-about --version 2>/dev/null | grep -q "cargo-about ${CARGO_ABOUT_VERSION}" \
+	|| { log "cargo-about ${CARGO_ABOUT_VERSION} not on PATH after install"; exit 1; }
 
 # --- CEF (linked against at build time, bundled at package time) ---------
 log "Fetching CEF ${CEF_VERSION}..."
